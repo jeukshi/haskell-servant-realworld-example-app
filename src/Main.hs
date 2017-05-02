@@ -1,18 +1,18 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeOperators     #-}
 
 module Main where
 
-import Data.Text
-import Data.Proxy
-import Data.Time (UTCTime)
-import Servant.API
-import Servant
-import Control.Monad.Except
-import Network.Wai
-import Network.Wai.Handler.Warp (run)
-import Types
+import           Control.Monad.Except
+import           Data.Proxy
+import           Data.Text
+import           Data.Time                (UTCTime)
+import           Network.Wai
+import           Network.Wai.Handler.Warp (run)
+import           Servant
+import           Servant.API
+import           Types
 
 main :: IO ()
 main = do
@@ -42,7 +42,6 @@ server = auth
     :<|> updateUser
 
   where
-    auth = return $ User $ Auth "mail@mail" "token" "username" "bio" Nothing
     -- login (User a) = return $ User $ Auth (logEmail a) "token" "username" "bio" Nothing
     login (User login) = do
       liftIO $ print login
@@ -53,7 +52,9 @@ server = auth
     updateUser (User user) = do
       liftIO $ print user
       let email = case (uusEmail user) of
-            Just x -> x
+            Just x  -> x
             Nothing -> ""
       return $ User $ Auth email "token" "username" "bio" Nothing
 
+auth :: Handler (User Auth)
+auth = return $ User $ Auth "mail@mail" "token" "username" "bio" Nothing

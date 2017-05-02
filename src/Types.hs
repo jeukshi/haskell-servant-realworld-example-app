@@ -1,13 +1,16 @@
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric #-}
 
 module Types where
 
-import Data.Text (Text)
-import Data.Aeson (decode)
-import Data.Aeson.Types (withObject, parseJSON, genericParseJSON, FromJSON, ToJSON, toJSON, object, (.:), (.=), fieldLabelModifier, defaultOptions, genericToJSON)
-import Data.Char (toLower)
-import GHC.Generics (Generic)
+import           Data.Aeson       (decode)
+import           Data.Aeson.Types (FromJSON, ToJSON, defaultOptions,
+                                   fieldLabelModifier, genericParseJSON,
+                                   genericToJSON, object, parseJSON, toJSON,
+                                   withObject, (.:), (.=))
+import           Data.Char        (toLower)
+import           Data.Text        (Text)
+import           GHC.Generics     (Generic)
 
 toJSONoptions = defaultOptions {
              fieldLabelModifier = map toLower . drop 3 }
@@ -24,7 +27,7 @@ instance FromJSON a => FromJSON (User a) where
     return (User a)
 
 data Login = Login
-  { logEmail :: String
+  { logEmail    :: String
   , logPassword :: String
   } deriving (Eq, Show, Generic)
 
@@ -35,11 +38,11 @@ instance FromJSON Login where
   parseJSON = genericParseJSON toJSONoptions
 
 data Auth = Auth
-  { aurEmail :: String
-  , aurToken :: String
+  { aurEmail    :: String
+  , aurToken    :: String
   , aurUsername :: String
-  , aurBio :: String
-  , aurImage :: Maybe String
+  , aurBio      :: String
+  , aurImage    :: Maybe String
   } deriving (Eq, Show, Generic)
 
 instance ToJSON Auth where
@@ -48,11 +51,11 @@ instance ToJSON Auth where
   -- TODO can't be Maybe - we need something isomorfic to Maybe
   -- otherwise we cant set field to null
 data UserUpdate = UserUpdate
-  { uusEmail :: Maybe String
-  , uusToken :: Maybe String
+  { uusEmail    :: Maybe String
+  , uusToken    :: Maybe String
   , uusUsername :: Maybe String
-  , uusBio :: Maybe String
-  , uusImage :: Maybe String
+  , uusBio      :: Maybe String
+  , uusImage    :: Maybe String
   } deriving (Eq, Show, Generic)
 
 instance ToJSON UserUpdate where
@@ -63,7 +66,7 @@ instance FromJSON UserUpdate where
 
   -- | TODO add fields
 data Reg = Reg
-  { regEmail :: String
+  { regEmail    :: String
   , regUsername :: String
   , regPassword :: Maybe String
   } deriving (Eq, Show, Generic)
@@ -75,9 +78,9 @@ instance FromJSON Reg where
   parseJSON = genericParseJSON toJSONoptions
 
 data Profile = Profile
-  { proUsername :: String
-  , proBio :: String
-  , proImage :: String
+  { proUsername  :: String
+  , proBio       :: String
+  , proImage     :: String
   , proFollowing :: Bool
   } deriving (Eq, Show, Generic)
 
@@ -86,15 +89,15 @@ instance ToJSON Profile where
 
 data Article = Article
   -- TODO types
-  { artSlug :: String
-  , artTitle :: String
-  , artDescription :: String
-  , artBody :: String
-  , artCreatedAt :: String
-  , artUpdatedAt :: String
-  , artFavorited :: String
+  { artSlug           :: String
+  , artTitle          :: String
+  , artDescription    :: String
+  , artBody           :: String
+  , artCreatedAt      :: String
+  , artUpdatedAt      :: String
+  , artFavorited      :: String
   , artFavoritesCount :: String
-  , artAuthor :: Profile
+  , artAuthor         :: Profile
   } deriving (Eq, Show, Generic)
 
 instance ToJSON Article where
