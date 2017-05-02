@@ -75,7 +75,7 @@ register conn (User newUser) = do
   return $ User $ fmap userToAuthUser addedUser
 
 userToAuthUser :: DBUser -> AuthUser
-userToAuthUser DBUser{..} =
+userToAuthUser DBUser {..} =
   let aurEmail = usrEmail
       -- TODO JWT
       aurToken = "TODO"
