@@ -22,9 +22,9 @@ main = do
 app :: Application
 app = serve api server
 
-type API = "api" :> "user" :> Get '[JSON] (User Auth)
+type API =
          -- | Authentication
-      :<|> "api" :> "users" :> "login" :> ReqBody '[JSON] (User Login) :> Post '[JSON] (User Auth)
+           "api" :> "users" :> "login" :> ReqBody '[JSON] (User Login) :> Post '[JSON] (User Auth)
          -- | Registration
       :<|> "api" :> "users" :> ReqBody '[JSON] (User Reg) :> Post '[JSON] (User Auth)
          -- | Get Current User
@@ -36,25 +36,25 @@ api :: Proxy API
 api = Proxy
 
 server :: Server API
-server = auth
-    :<|> login
+server = login
     :<|> register
     :<|> updateUser
 
-  where
-    -- login (User a) = return $ User $ Auth (logEmail a) "token" "username" "bio" Nothing
-    login (User login) = do
-      liftIO $ print login
-      return $ User $ Auth (logEmail login) "token" "username" "bio" Nothing
-    register (User reg) = do
+login :: (User Login) -> Handler (User Auth)
+login (User login) = do
+  liftIO $ print login
+  return $ User $ Auth (logEmail login) "token" "username" "bio" Nothing
+
+updateUser :: (User UserUpdate) -> Handler (User Auth)
+updateUser (User user) = do
+  liftIO $ print user
+  let email = case (uusEmail user) of
+        Just x  -> x
+        Nothing -> ""
+  return $ User $ Auth email "token" "username" "bio" Nothing
+
+
+register :: (User Reg) -> Handler (User Auth)
+register (User reg) = do
       liftIO $ print reg
       return $ User $ Auth (regEmail reg) "token" "username" "bio" Nothing
-    updateUser (User user) = do
-      liftIO $ print user
-      let email = case (uusEmail user) of
-            Just x  -> x
-            Nothing -> ""
-      return $ User $ Auth email "token" "username" "bio" Nothing
-
-auth :: Handler (User Auth)
-auth = return $ User $ Auth "mail@mail" "token" "username" "bio" Nothing
