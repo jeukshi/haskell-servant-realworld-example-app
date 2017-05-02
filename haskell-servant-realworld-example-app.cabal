@@ -18,3 +18,13 @@ executable haskell-servant-realworld-example-app
   main-is:             Main.hs
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
+                     , time
+                     , text
+                     , servant
+                     , servant-server
+                     , mtl
+                     , wai
+                     , warp
+                     , aeson
+                     , sqlite-simple
+  other-modules: Types
