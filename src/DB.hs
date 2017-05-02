@@ -8,8 +8,6 @@ import           Database.SQLite.Simple
 import           GHC.Int                (Int64)
 import           Types
 
-data RegError = UserExists
-
 dbRegister :: Connection -> NewUser -> IO (Maybe DBUser)
 -- TODO We need transaction here.
 dbRegister conn newUser = do
