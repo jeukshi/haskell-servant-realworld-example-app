@@ -27,4 +27,4 @@ executable haskell-servant-realworld-example-app
                      , warp
                      , aeson
                      , sqlite-simple
-  other-modules: Types
+  other-modules: Types, DB

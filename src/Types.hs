@@ -1,19 +1,32 @@
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
 module Types where
 
-import           Data.Aeson       (decode)
-import           Data.Aeson.Types (FromJSON, ToJSON, defaultOptions,
-                                   fieldLabelModifier, genericParseJSON,
-                                   genericToJSON, object, parseJSON, toJSON,
-                                   withObject, (.:), (.=))
-import           Data.Char        (toLower)
-import           Data.Text        (Text)
-import           GHC.Generics     (Generic)
+import           Data.Aeson                       (decode)
+import           Data.Aeson.Types                 (FromJSON, ToJSON,
+                                                   defaultOptions,
+                                                   fieldLabelModifier,
+                                                   genericParseJSON,
+                                                   genericToJSON, object,
+                                                   parseJSON, toJSON,
+                                                   withObject, (.:), (.=))
+import           Data.Char                        (toLower)
+import           Data.Text                        (Text)
+import           Database.SQLite.Simple           (field)
+import           Database.SQLite.Simple.FromField (FromField)
+import           Database.SQLite.Simple.FromRow   (FromRow, fromRow)
+import           Database.SQLite.Simple.ToField   (ToField)
+import           Database.SQLite.Simple.ToRow     (ToRow, toRow)
+import           GHC.Generics                     (Generic)
+import           GHC.Int                          (Int64)
 
 toJSONoptions = defaultOptions {
              fieldLabelModifier = map toLower . drop 3 }
+
+newtype Password = Password Text
+  deriving (Eq, Show, FromJSON, FromField, ToField)
 
 data User a = User a
   deriving (Eq, Show, Generic)
@@ -27,60 +40,69 @@ instance FromJSON a => FromJSON (User a) where
     return (User a)
 
 data Login = Login
-  { logEmail    :: String
-  , logPassword :: String
+  { logEmail    :: Text
+  , logPassword :: Password
   } deriving (Eq, Show, Generic)
-
-instance ToJSON Login where
-  toJSON = genericToJSON toJSONoptions
 
 instance FromJSON Login where
   parseJSON = genericParseJSON toJSONoptions
 
-data Auth = Auth
-  { aurEmail    :: String
-  , aurToken    :: String
-  , aurUsername :: String
-  , aurBio      :: String
+data DBUser = DBUser
+  { usrId       :: Int64
+  , usrEmail    :: Text
+  , usrUsername :: Text
+  , usrPassword :: Password
+  , usrBio      :: Maybe Text
+  , usrImage    :: Maybe String
+  } deriving (Eq, Show, Generic)
+
+instance FromRow DBUser where
+  fromRow = DBUser <$> field <*> field <*> field <*> field <*> field <*> field
+
+-- | This is User from spec.
+data AuthUser = AuthUser
+  { aurEmail    :: Text
+  , aurToken    :: Text
+  , aurUsername :: Text
+  , aurBio      :: Maybe Text
   , aurImage    :: Maybe String
   } deriving (Eq, Show, Generic)
 
-instance ToJSON Auth where
+instance ToJSON AuthUser where
   toJSON = genericToJSON toJSONoptions
 
   -- TODO can't be Maybe - we need something isomorfic to Maybe
   -- otherwise we cant set field to null
-data UserUpdate = UserUpdate
-  { uusEmail    :: Maybe String
-  , uusToken    :: Maybe String
-  , uusUsername :: Maybe String
-  , uusBio      :: Maybe String
-  , uusImage    :: Maybe String
+data UpdateUser = UpdateUser
+  { uusEmail    :: Maybe Text
+  , uusToken    :: Maybe Text
+  , uusUsername :: Maybe Text
+  , uusBio      :: Maybe Text
+  , uusImage    :: Maybe Text
   } deriving (Eq, Show, Generic)
 
-instance ToJSON UserUpdate where
-  toJSON = genericToJSON toJSONoptions
-
-instance FromJSON UserUpdate where
+instance FromJSON UpdateUser where
   parseJSON = genericParseJSON toJSONoptions
 
   -- | TODO add fields
-data Reg = Reg
-  { regEmail    :: String
-  , regUsername :: String
-  , regPassword :: Maybe String
+data NewUser = NewUser
+  { nusEmail    :: Text
+  , nusUsername :: Text
+  , nusPassword :: Password
+  , nusBio      :: Maybe Text
+  , nusImage    :: Maybe String
   } deriving (Eq, Show, Generic)
 
-instance ToJSON Reg where
-  toJSON = genericToJSON toJSONoptions
-
-instance FromJSON Reg where
+instance FromJSON NewUser where
   parseJSON = genericParseJSON toJSONoptions
 
+instance ToRow NewUser where
+  toRow (NewUser e u p b i) = toRow (e, u, p, b, i)
+
 data Profile = Profile
-  { proUsername  :: String
-  , proBio       :: String
-  , proImage     :: String
+  { proUsername  :: Text
+  , proBio       :: Maybe Text
+  , proImage     :: Text
   , proFollowing :: Bool
   } deriving (Eq, Show, Generic)
 
@@ -89,14 +111,14 @@ instance ToJSON Profile where
 
 data Article = Article
   -- TODO types
-  { artSlug           :: String
-  , artTitle          :: String
-  , artDescription    :: String
-  , artBody           :: String
-  , artCreatedAt      :: String
-  , artUpdatedAt      :: String
-  , artFavorited      :: String
-  , artFavoritesCount :: String
+  { artSlug           :: Text
+  , artTitle          :: Text
+  , artDescription    :: Text
+  , artBody           :: Text
+  , artCreatedAt      :: Text
+  , artUpdatedAt      :: Text
+  , artFavorited      :: Text
+  , artFavoritesCount :: Text
   , artAuthor         :: Profile
   } deriving (Eq, Show, Generic)
 
