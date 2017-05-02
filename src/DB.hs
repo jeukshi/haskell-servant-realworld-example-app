@@ -27,16 +27,16 @@ dbGetUserByNameOrEmail conn name email = do
     False -> return $ Just $ head results
   where
     stmt =
-      "select usr_id \
+      "SELECT usr_id \
           \ , usr_email \
           \ , usr_username \
           \ , usr_password \
           \ , usr_bio \
           \ , usr_image \
-       \ from users \
-      \ where usr_username = ? \
-         \ or usr_email = ? \
-      \ limit 1"
+       \ FROM users \
+      \ WHERE usr_username = ? \
+         \ OR usr_email = ? \
+      \ LIMIT 1"
 
 dbAddUser :: Connection -> NewUser -> IO DBUser
 dbAddUser conn newUser = do
@@ -46,13 +46,13 @@ dbAddUser conn newUser = do
   return $ newUserWithId newUser id_
   where
     stmt =
-      "insert into users \
+      "INSERT INTO users \
           \ ( usr_email \
           \ , usr_username \
           \ , usr_password \
           \ , usr_bio \
           \ , usr_image) \
-     \ values \
+     \ VALUES \
           \ (?, ?, ?, ?, ?)"
 
 newUserWithId :: NewUser -> Int64 -> DBUser
