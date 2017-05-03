@@ -51,17 +51,21 @@ app conn = serveWithContext api serverAuthContext (server conn)
 
 type API =
          -- | Authentication
-           "api" :> "users" :> "login" :>
-           ReqBody '[JSON] (User Login) :> Post '[JSON] (User AuthUser)
+           "api" :> "users" :> "login"
+           :> ReqBody '[JSON] (User Login)
+           :> Post '[JSON] (User AuthUser)
          -- | Registration
-      :<|> "api" :> "users" :>
-           ReqBody '[JSON] (User NewUser) :> Post '[JSON] (User (Maybe AuthUser))
+      :<|> "api" :> "users"
+           :> ReqBody '[JSON] (User NewUser)
+           :> Post '[JSON] (User (Maybe AuthUser))
          -- | Get Current User
-      :<|> "api" :> "user" :>
-           AuthProtect "JWT" :> Get '[JSON] (User AuthUser)
+      :<|> "api" :> "user"
+           :> AuthProtect "JWT"
+           :> Get '[JSON] (User AuthUser)
          -- | Update User
       :<|> "api" :> "user"
-           :> ReqBody '[JSON] (User UpdateUser) :> Put '[JSON] (User AuthUser)
+           :> AuthProtect "JWT" :> ReqBody '[JSON] (User UpdateUser)
+           :> Put '[JSON] (User AuthUser)
 
 api :: Proxy API
 api = Proxy
@@ -135,15 +139,13 @@ loginHandler conn (User login) = do
     Nothing -> throwError (err401 {errBody = "Incorrect login or password"})
     Just usr -> return $ User $ userToAuthUser usr
 
-updateUserHandler :: Connection -> (User UpdateUser) -> Handler (User AuthUser)
-updateUserHandler conn (User user) = do
-  liftIO $ print "updateUser handler"
-  liftIO $ print user
-  let email =
-        case (uusEmail user) of
-          Just x  -> x
-          Nothing -> ""
-  return $ User $ AuthUser email "token" "username" Nothing Nothing
+updateUserHandler :: Connection -> DBUser -> (User UpdateUser) -> Handler (User AuthUser)
+updateUserHandler conn user (User update) = do
+  let updatedUser = updateUser user update
+  result <- liftIO $ dbUpdateUser conn updatedUser
+  case result of
+    Nothing -> throwError (err409 {errBody = "Username or email already taken"})
+    Just x -> return $ User $ userToAuthUser x
 
   -- TODO We should return error instead of Maybe.
 registerHandler :: Connection -> (User NewUser) -> Handler (User (Maybe AuthUser))

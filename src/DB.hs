@@ -11,20 +11,18 @@ import           Types
 dbRegister :: Connection -> NewUser -> IO (Maybe DBUser)
 -- TODO We need transaction here.
 dbRegister conn newUser = do
-  user <-
-    dbGetUserByNameOrEmail conn (nusUsername newUser) (nusEmail newUser)
-  case user of
-    Just _ -> return Nothing
-    Nothing -> do
-      u <- dbAddUser conn newUser
-      return $ Just u
+  existingUsers <-
+    dbGetUsersByNameOrEmail conn (nusUsername newUser) (nusEmail newUser)
+  case null existingUsers of
+    False -> return Nothing
+    True -> do
+      addedUser <- dbAddUser conn newUser
+      return $ Just addedUser
 
-dbGetUserByNameOrEmail :: Connection -> Text -> Text -> IO (Maybe DBUser)
-dbGetUserByNameOrEmail conn name email = do
+dbGetUsersByNameOrEmail :: Connection -> Text -> Text -> IO [DBUser]
+dbGetUsersByNameOrEmail conn name email = do
   results <- query conn stmt [name, email] :: IO [DBUser]
-  case null results of
-    True -> return Nothing
-    False -> return $ Just $ head results
+  return results
   where
     stmt =
       "SELECT usr_id \
@@ -35,14 +33,13 @@ dbGetUserByNameOrEmail conn name email = do
           \ , usr_image \
        \ FROM users \
       \ WHERE usr_username = ? \
-         \ OR usr_email = ? \
-      \ LIMIT 1"
+         \ OR usr_email = ? "
 
 dbGetUserByName :: Connection -> Text -> IO (Maybe DBUser)
 dbGetUserByName conn name = do
   results <- query conn stmt [name] :: IO [DBUser]
   case null results of
-    True -> return Nothing
+    True  -> return Nothing
     False -> return $ Just $ head results
   where
     stmt =
@@ -60,7 +57,7 @@ dbGetUserByLogin :: Connection -> Login -> IO (Maybe DBUser)
 dbGetUserByLogin conn (Login email password) = do
   results <- query conn stmt [email, unPassword password] :: IO [DBUser]
   case null results of
-    True -> return Nothing
+    True  -> return Nothing
     False -> return $ Just $ head results
   where
     stmt =
@@ -90,7 +87,42 @@ dbAddUser conn newUser = do
           \ , usr_bio \
           \ , usr_image) \
      \ VALUES \
-          \ (?, ?, ?, ?, ?)"
+          \ (?, ?, ?, ?, ?) "
+
+-- FIXME Remove this hack - XRecordWildCards shadowed record accesor.
+userToId :: DBUser -> Int64
+userToId = usrId
+
+dbUpdateUser :: Connection -> DBUser -> IO (Maybe DBUser)
+dbUpdateUser conn DBUser {..} = do
+  -- Check if name or email are already taken.
+  existingUsers <-
+    dbGetUsersByNameOrEmail conn usrUsername usrEmail
+  let existingUsers' = filter (\x -> (userToId x) /= usrId) existingUsers
+  case null existingUsers' of
+    False -> return Nothing
+    True -> do
+      _ <- execute conn stmt args
+      return $ Just DBUser {..}
+  where
+    args =
+        toRow
+          ( usrEmail
+          , usrUsername
+          , unPassword usrPassword
+          , usrBio
+          , usrImage
+          , usrId)
+    stmt =
+      "UPDATE users \
+        \ SET usr_email = ? \
+          \ , usr_username = ? \
+          \ , usr_password = ? \
+          \ , usr_bio = ? \
+          \ , usr_image = ? \
+      \ WHERE \
+          \   usr_id = ?"
+
 
 newUserWithId :: NewUser -> Int64 -> DBUser
 newUserWithId NewUser {..} id_ =

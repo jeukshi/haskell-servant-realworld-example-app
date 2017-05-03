@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
 
 module Types where
 
@@ -13,6 +14,7 @@ import           Data.Aeson.Types                 (FromJSON, ToJSON,
                                                    parseJSON, toJSON,
                                                    withObject, (.:), (.=))
 import           Data.Char                        (toLower)
+import           Data.Maybe                       (fromMaybe, isNothing)
 import           Data.Text                        (Text)
 import           Database.SQLite.Simple           (field)
 import           Database.SQLite.Simple.FromField (FromField)
@@ -53,7 +55,7 @@ data AuthUser = AuthUser
   , aurToken    :: Text
   , aurUsername :: Username
   , aurBio      :: Maybe Text
-  , aurImage    :: Maybe String
+  , aurImage    :: Maybe Text
   } deriving (Eq, Show, Generic)
 
 instance ToJSON AuthUser where
@@ -74,7 +76,6 @@ instance FromJSON Login where
   -- otherwise we cant set field to null
 data UpdateUser = UpdateUser
   { uusEmail    :: Maybe Text
-  , uusToken    :: Maybe Text
   , uusUsername :: Maybe Username
   , uusBio      :: Maybe Text
   , uusImage    :: Maybe Text
@@ -89,7 +90,7 @@ data NewUser = NewUser
   , nusUsername :: Username
   , nusPassword :: Password
   , nusBio      :: Maybe Text
-  , nusImage    :: Maybe String
+  , nusImage    :: Maybe Text
   } deriving (Eq, Show, Generic)
 
 instance FromJSON NewUser where
@@ -133,8 +134,19 @@ data DBUser = DBUser
   , usrUsername :: Username
   , usrPassword :: Password
   , usrBio      :: Maybe Text
-  , usrImage    :: Maybe String
+  , usrImage    :: Maybe Text
   } deriving (Eq, Show, Generic)
 
 instance FromRow DBUser where
   fromRow = DBUser <$> field <*> field <*> field <*> field <*> field <*> field
+
+-- FIXME This way we can't set bio and image to null.
+updateUser :: DBUser -> UpdateUser -> DBUser
+updateUser DBUser {..} UpdateUser {..} =
+      DBUser usrId
+             (fromMaybe usrEmail uusEmail)
+             (fromMaybe usrUsername uusUsername)
+             usrPassword
+             (if isNothing uusBio then usrBio else uusBio)
+             (if isNothing uusImage then usrImage else uusImage)
+
