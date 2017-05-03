@@ -25,6 +25,8 @@ import           GHC.Int                          (Int64)
 toJSONoptions = defaultOptions {
              fieldLabelModifier = map toLower . drop 3 }
 
+type Username = Text
+
 newtype Password = Password Text
   deriving (Eq, Show, FromJSON, FromField, ToField)
 
@@ -50,7 +52,7 @@ instance FromJSON Login where
 data DBUser = DBUser
   { usrId       :: Int64
   , usrEmail    :: Text
-  , usrUsername :: Text
+  , usrUsername :: Username
   , usrPassword :: Password
   , usrBio      :: Maybe Text
   , usrImage    :: Maybe String
@@ -63,7 +65,7 @@ instance FromRow DBUser where
 data AuthUser = AuthUser
   { aurEmail    :: Text
   , aurToken    :: Text
-  , aurUsername :: Text
+  , aurUsername :: Username
   , aurBio      :: Maybe Text
   , aurImage    :: Maybe String
   } deriving (Eq, Show, Generic)
@@ -76,7 +78,7 @@ instance ToJSON AuthUser where
 data UpdateUser = UpdateUser
   { uusEmail    :: Maybe Text
   , uusToken    :: Maybe Text
-  , uusUsername :: Maybe Text
+  , uusUsername :: Maybe Username
   , uusBio      :: Maybe Text
   , uusImage    :: Maybe Text
   } deriving (Eq, Show, Generic)
@@ -87,7 +89,7 @@ instance FromJSON UpdateUser where
   -- | TODO add fields
 data NewUser = NewUser
   { nusEmail    :: Text
-  , nusUsername :: Text
+  , nusUsername :: Username
   , nusPassword :: Password
   , nusBio      :: Maybe Text
   , nusImage    :: Maybe String
@@ -100,7 +102,7 @@ instance ToRow NewUser where
   toRow (NewUser e u p b i) = toRow (e, u, p, b, i)
 
 data Profile = Profile
-  { proUsername  :: Text
+  { proUsername  :: Username
   , proBio       :: Maybe Text
   , proImage     :: Text
   , proFollowing :: Bool
