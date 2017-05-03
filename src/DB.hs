@@ -38,6 +38,24 @@ dbGetUserByNameOrEmail conn name email = do
          \ OR usr_email = ? \
       \ LIMIT 1"
 
+dbGetUserByName :: Connection -> Text -> IO (Maybe DBUser)
+dbGetUserByName conn name = do
+  results <- query conn stmt [name] :: IO [DBUser]
+  case null results of
+    True -> return Nothing
+    False -> return $ Just $ head results
+  where
+    stmt =
+      "SELECT usr_id \
+          \ , usr_email \
+          \ , usr_username \
+          \ , usr_password \
+          \ , usr_bio \
+          \ , usr_image \
+       \ FROM users \
+      \ WHERE usr_username = ? \
+      \ LIMIT 1"
+
 dbAddUser :: Connection -> NewUser -> IO DBUser
 dbAddUser conn newUser = do
   execute conn stmt newUser

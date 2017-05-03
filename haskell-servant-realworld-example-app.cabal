@@ -29,4 +29,5 @@ executable haskell-servant-realworld-example-app
                      , sqlite-simple
                      , jwt
                      , containers
+                     , bytestring
   other-modules: Types, DB

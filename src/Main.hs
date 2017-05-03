@@ -1,25 +1,30 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TypeFamilies      #-}
 {-# LANGUAGE TypeOperators     #-}
 
 module Main where
 
-import           Control.Monad.Except     (liftIO)
-import           Data.Aeson               (Result (..), fromJSON, toJSON)
-import qualified Data.Map                 as Map
+import           Control.Monad.Except             (liftIO)
+import           Data.Aeson                       (Result (..), fromJSON,
+                                                   toJSON)
+import qualified Data.ByteString                  as BS
+import qualified Data.Map                         as Map
 import           Data.Proxy
 import           Data.Text
-import qualified Data.Text                as T
-import           Data.Time                (UTCTime)
-import           Database.SQLite.Simple   (Connection, open)
+import qualified Data.Text                        as T
+import           Data.Text.Encoding               (decodeUtf8)
+import           Data.Time                        (UTCTime)
+import           Database.SQLite.Simple           (Connection, open)
 import           DB
 import           Network.Wai
-import           Network.Wai.Handler.Warp (run)
+import           Network.Wai.Handler.Warp         (run)
 import           Servant
 import           Servant.API
+import           Servant.Server.Experimental.Auth
 import           Types
-import qualified Web.JWT                  as JWT
+import qualified Web.JWT                          as JWT
 
 -- FIXME Secret in source.
 secret :: JWT.Secret
@@ -36,17 +41,26 @@ main = do
   run 8081 (app conn)
 
 app :: Connection -> Application
-app conn = serve api (server conn)
+app conn = serveWithContext api serverAuthContext (server conn)
+  where
+    serverAuthContext :: Context (AuthHandler Request DBUser ': '[])
+    serverAuthContext = (authHandler conn) :. EmptyContext
+
+type instance AuthServerData (AuthProtect "JWT") = DBUser
 
 type API =
-         -- | AuthUserentication
-           "api" :> "users" :> "login" :> ReqBody '[JSON] (User Login) :> Post '[JSON] (User AuthUser)
+         -- | Authentication
+           "api" :> "users" :> "login" :>
+           ReqBody '[JSON] (User Login) :> Post '[JSON] (User AuthUser)
          -- | Registration
-      :<|> "api" :> "users" :> ReqBody '[JSON] (User NewUser) :> Post '[JSON] (User (Maybe AuthUser))
+      :<|> "api" :> "users" :>
+           ReqBody '[JSON] (User NewUser) :> Post '[JSON] (User (Maybe AuthUser))
          -- | Get Current User
-      :<|> "api" :> "user" :> Header "Authorization" Text :> Get '[JSON] (Maybe (User Username))
+      :<|> "api" :> "user" :>
+           AuthProtect "JWT" :> Get '[JSON] (User AuthUser)
          -- | Update User
-      :<|> "api" :> "user" :> ReqBody '[JSON] (User UpdateUser) :> Put '[JSON] (User AuthUser)
+      :<|> "api" :> "user"
+           :> ReqBody '[JSON] (User UpdateUser) :> Put '[JSON] (User AuthUser)
 
 api :: Proxy API
 api = Proxy
@@ -58,20 +72,44 @@ server conn = (login conn)
          :<|> (getUser conn)
          :<|> (updateUser conn)
 
-getUser :: Connection -> Maybe Text -> Handler (Maybe (User Username))
-getUser conn auth =
-  case auth of
-    Nothing -> throwError err401
-    Just x -> do
-      let (_, token) = T.splitAt (T.length "Token ") x
-          jwt = JWT.decodeAndVerifySignature secret token
-          json =
-            Map.lookup "username" =<<
-            fmap (JWT.unregisteredClaims . JWT.claims) jwt
-          username = fmap fromJSON json
-      case username of
-        Just (Success x) -> return $ Just x
-        _                -> return $ Nothing
+--------------------------------------------------------------------------------
+
+authHandler :: Connection -> AuthHandler Request DBUser
+  -- FIXME Too nested.
+authHandler conn =
+  let handler req =
+        case lookup "Authorization" (requestHeaders req) of
+          Nothing ->
+            throwError (err401 {errBody = "Missing 'Authorization' header"})
+          Just token ->
+            case decodeToken token of
+              Nothing ->
+                throwError (err401 {errBody = "Wrong 'Authorization' token"})
+              Just username -> do
+                usr <- liftIO $ dbGetUserByName conn username
+                case usr of
+                  Nothing ->
+                    throwError (err401 {errBody = "User doesn't exist"})
+                  Just usr -> return usr
+  in mkAuthHandler handler
+
+--------------------------------------------------------------------------------
+getUser :: Connection -> DBUser -> Handler (User AuthUser)
+getUser conn usr = return $ User $ userToAuthUser usr
+
+decodeToken :: BS.ByteString -> Maybe Username
+decodeToken auth =
+  -- TODO Maybe we should use safe version of decodeUtf8.
+  let auth' = decodeUtf8 auth
+      (_, token) = T.splitAt (T.length "Token ") auth'
+      jwt = JWT.decodeAndVerifySignature secret token
+      json =
+        Map.lookup "username" =<<
+        fmap (JWT.unregisteredClaims . JWT.claims) jwt
+      username = fmap fromJSON json
+  in case username of
+        Just (Success (User x)) -> Just x
+        _                       -> Nothing
 
 login :: Connection -> (User Login) -> Handler (User AuthUser)
 login conn (User login) = do
@@ -101,7 +139,6 @@ register conn (User newUser) = do
 userToAuthUser :: DBUser -> AuthUser
 userToAuthUser DBUser {..} =
   let aurEmail = usrEmail
-      -- TODO JWT
       aurToken = token usrUsername
       aurUsername = usrUsername
       aurBio = usrBio
