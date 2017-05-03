@@ -30,7 +30,7 @@ toJSONoptions = defaultOptions {
 
 type Username = Text
 
-newtype Password = Password Text
+newtype Password = Password { unPassword :: Text }
   deriving (Eq, Show, FromJSON, FromField, ToField)
 
 data User a = User a
