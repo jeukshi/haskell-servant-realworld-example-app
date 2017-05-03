@@ -130,9 +130,10 @@ getUserHandler conn usr = return $ User $ userToAuthUser usr
 
 loginHandler :: Connection -> (User Login) -> Handler (User AuthUser)
 loginHandler conn (User login) = do
-  liftIO $ print "login handler"
-  liftIO $ print login
-  return $ User $ AuthUser (logEmail login) "token" "username" Nothing Nothing
+  mbUser <- liftIO $ dbGetUserByLogin conn login
+  case mbUser of
+    Nothing -> throwError (err401 {errBody = "Incorrect login or password"})
+    Just usr -> return $ User $ userToAuthUser usr
 
 updateUserHandler :: Connection -> (User UpdateUser) -> Handler (User AuthUser)
 updateUserHandler conn (User user) = do

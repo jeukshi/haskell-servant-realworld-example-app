@@ -56,6 +56,25 @@ dbGetUserByName conn name = do
       \ WHERE usr_username = ? \
       \ LIMIT 1"
 
+dbGetUserByLogin :: Connection -> Login -> IO (Maybe DBUser)
+dbGetUserByLogin conn (Login email password) = do
+  results <- query conn stmt [email, unPassword password] :: IO [DBUser]
+  case null results of
+    True -> return Nothing
+    False -> return $ Just $ head results
+  where
+    stmt =
+      "SELECT usr_id \
+          \ , usr_email \
+          \ , usr_username \
+          \ , usr_password \
+          \ , usr_bio \
+          \ , usr_image \
+       \ FROM users \
+      \ WHERE usr_email = ? \
+        \ AND usr_password = ? \
+      \ LIMIT 1"
+
 dbAddUser :: Connection -> NewUser -> IO DBUser
 dbAddUser conn newUser = do
   execute conn stmt newUser
