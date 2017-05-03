@@ -46,7 +46,8 @@ app conn = serveWithContext api serverAuthContext (server conn)
     serverAuthContext :: Context (AuthHandler Request DBUser ': '[])
     serverAuthContext = (authHandler conn) :. EmptyContext
 
-type instance AuthServerData (AuthProtect "JWT") = DBUser
+------------------------------------------------------------------------
+-- | API
 
 type API =
          -- | Authentication
@@ -65,14 +66,20 @@ type API =
 api :: Proxy API
 api = Proxy
 
+------------------------------------------------------------------------
+-- | Server
+
 -- FIXME far from ideal managment of connection.
 server :: Connection -> Server API
-server conn = (login conn)
-         :<|> (register conn)
-         :<|> (getUser conn)
-         :<|> (updateUser conn)
+server conn = (loginHandler conn)
+         :<|> (registerHandler conn)
+         :<|> (getUserHandler conn)
+         :<|> (updateUserHandler conn)
 
---------------------------------------------------------------------------------
+------------------------------------------------------------------------
+-- | Auth
+
+type instance AuthServerData (AuthProtect "JWT") = DBUser
 
 authHandler :: Connection -> AuthHandler Request DBUser
   -- FIXME Too nested.
@@ -93,10 +100,6 @@ authHandler conn =
                   Just usr -> return usr
   in mkAuthHandler handler
 
---------------------------------------------------------------------------------
-getUser :: Connection -> DBUser -> Handler (User AuthUser)
-getUser conn usr = return $ User $ userToAuthUser usr
-
 decodeToken :: BS.ByteString -> Maybe Username
 decodeToken auth =
   -- TODO Maybe we should use safe version of decodeUtf8.
@@ -111,14 +114,28 @@ decodeToken auth =
         Just (Success (User x)) -> Just x
         _                       -> Nothing
 
-login :: Connection -> (User Login) -> Handler (User AuthUser)
-login conn (User login) = do
+token :: Username -> JWT.JSON
+token username =
+  JWT.encodeSigned
+    JWT.HS256
+    secret
+    JWT.def
+    {JWT.unregisteredClaims = Map.singleton "username" . toJSON $ User username}
+
+------------------------------------------------------------------------
+-- | Handlers
+
+getUserHandler :: Connection -> DBUser -> Handler (User AuthUser)
+getUserHandler conn usr = return $ User $ userToAuthUser usr
+
+loginHandler :: Connection -> (User Login) -> Handler (User AuthUser)
+loginHandler conn (User login) = do
   liftIO $ print "login handler"
   liftIO $ print login
   return $ User $ AuthUser (logEmail login) "token" "username" Nothing Nothing
 
-updateUser :: Connection -> (User UpdateUser) -> Handler (User AuthUser)
-updateUser conn (User user) = do
+updateUserHandler :: Connection -> (User UpdateUser) -> Handler (User AuthUser)
+updateUserHandler conn (User user) = do
   liftIO $ print "updateUser handler"
   liftIO $ print user
   let email =
@@ -128,13 +145,16 @@ updateUser conn (User user) = do
   return $ User $ AuthUser email "token" "username" Nothing Nothing
 
   -- TODO We should return error instead of Maybe.
-register :: Connection -> (User NewUser) -> Handler (User (Maybe AuthUser))
-register conn (User newUser) = do
+registerHandler :: Connection -> (User NewUser) -> Handler (User (Maybe AuthUser))
+registerHandler conn (User newUser) = do
   liftIO $ print "register handler"
   liftIO $ print newUser
   addedUser <- liftIO $ dbRegister conn newUser
   liftIO $ print addedUser
   return $ User $ fmap userToAuthUser addedUser
+
+------------------------------------------------------------------------
+-- | Utils
 
 userToAuthUser :: DBUser -> AuthUser
 userToAuthUser DBUser {..} =
@@ -145,10 +165,3 @@ userToAuthUser DBUser {..} =
       aurImage = usrImage
   in AuthUser {..}
 
-token :: Username -> JWT.JSON
-token username =
-  JWT.encodeSigned
-    JWT.HS256
-    secret
-    JWT.def
-    {JWT.unregisteredClaims = Map.singleton "username" . toJSON $ User username}

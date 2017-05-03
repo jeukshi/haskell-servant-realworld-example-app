@@ -25,6 +25,9 @@ import           GHC.Int                          (Int64)
 toJSONoptions = defaultOptions {
              fieldLabelModifier = map toLower . drop 3 }
 
+------------------------------------------------------------------------
+-- | Common
+
 type Username = Text
 
 newtype Password = Password Text
@@ -41,25 +44,8 @@ instance FromJSON a => FromJSON (User a) where
     a <- o .: "user"
     return (User a)
 
-data Login = Login
-  { logEmail    :: Text
-  , logPassword :: Password
-  } deriving (Eq, Show, Generic)
-
-instance FromJSON Login where
-  parseJSON = genericParseJSON toJSONoptions
-
-data DBUser = DBUser
-  { usrId       :: Int64
-  , usrEmail    :: Text
-  , usrUsername :: Username
-  , usrPassword :: Password
-  , usrBio      :: Maybe Text
-  , usrImage    :: Maybe String
-  } deriving (Eq, Show, Generic)
-
-instance FromRow DBUser where
-  fromRow = DBUser <$> field <*> field <*> field <*> field <*> field <*> field
+------------------------------------------------------------------------
+-- | Response body
 
 -- | This is User from spec.
 data AuthUser = AuthUser
@@ -72,6 +58,17 @@ data AuthUser = AuthUser
 
 instance ToJSON AuthUser where
   toJSON = genericToJSON toJSONoptions
+
+------------------------------------------------------------------------
+-- | Request body
+
+data Login = Login
+  { logEmail    :: Text
+  , logPassword :: Password
+  } deriving (Eq, Show, Generic)
+
+instance FromJSON Login where
+  parseJSON = genericParseJSON toJSONoptions
 
   -- TODO can't be Maybe - we need something isomorfic to Maybe
   -- otherwise we cant set field to null
@@ -126,3 +123,18 @@ data Article = Article
 
 instance ToJSON Article where
   toJSON = genericToJSON toJSONoptions
+
+------------------------------------------------------------------------
+-- | Database
+
+data DBUser = DBUser
+  { usrId       :: Int64
+  , usrEmail    :: Text
+  , usrUsername :: Username
+  , usrPassword :: Password
+  , usrBio      :: Maybe Text
+  , usrImage    :: Maybe String
+  } deriving (Eq, Show, Generic)
+
+instance FromRow DBUser where
+  fromRow = DBUser <$> field <*> field <*> field <*> field <*> field <*> field
