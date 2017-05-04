@@ -480,3 +480,10 @@ dbDeleteArticle conn article = do
     deleteFavourited = "DELETE FROM favourited where fav_art_id = ? "
     deleteTagged = "DELETE FROM tagged where tgd_art_id = ? "
     deleteArticles = "DELETE FROM articles where art_id = ? "
+
+dbGetTags :: Connection -> IO [Tag]
+dbGetTags conn = do
+  results <- query conn stmt () :: IO [Tag]
+  return results
+  where
+    stmt = "select tag_id, tag_text from tags"

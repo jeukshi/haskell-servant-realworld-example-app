@@ -95,6 +95,11 @@ data Arts a = Arts a Int
 instance ToJSON a => ToJSON (Arts a) where
   toJSON (Arts a i) = object ["articles" .= a, "articlesCount" .= i]
 
+data TagList a = TagList a
+  deriving (Eq, Show)
+
+instance ToJSON a => ToJSON (TagList a) where
+  toJSON (TagList a) = object ["tags" .= a]
 
 ------------------------------------------------------------------------
 -- | Response body

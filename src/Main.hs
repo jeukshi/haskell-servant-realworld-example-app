@@ -110,6 +110,10 @@ type API =
            :> AuthProtect "JWT"
            :> Delete '[JSON] ()
 
+        -- | Get Tags
+      :<|> "api" :> "tags"
+           :> Get '[JSON] (TagList [Text])
+
 
 api :: Proxy API
 api = Proxy
@@ -132,6 +136,7 @@ server conn = (loginHandler conn)
          :<|> (createArticleHandler conn)
          :<|> (updateArticleHandler conn)
          :<|> (deleteArticleHandler conn)
+         :<|> (getTagsHandler conn)
 
 ------------------------------------------------------------------------
 -- | Auth
@@ -302,6 +307,11 @@ deleteArticleHandler conn slug user = do
     -- TODO error numer and message
     Nothing -> throwError err404
     Just x -> liftIO $ dbDeleteArticle conn x
+
+getTagsHandler :: Connection -> Handler (TagList [Text])
+getTagsHandler conn = do
+  tags <- liftIO $ dbGetTags conn
+  return $ TagList $ fmap tagText tags
 
 ------------------------------------------------------------------------
 -- | Utils
