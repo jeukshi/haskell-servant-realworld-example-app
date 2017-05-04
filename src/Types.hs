@@ -42,7 +42,7 @@ type Limit = Int
 type Offset = Int
 type Tagged = Text
 type Author = Username
-type FavouritedBy = Username
+type FavoritedBy = Username
 
 type Username = Text
 

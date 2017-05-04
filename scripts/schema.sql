@@ -56,7 +56,7 @@ CREATE TABLE tagged (
 
 DROP TABLE IF EXISTS favourited;
 
-CREATE TABLE favourited (
+CREATE TABLE favorited (
     fav_usr_id INTEGER
   , fav_art_id INTEGER
 

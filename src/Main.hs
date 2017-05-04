@@ -86,7 +86,7 @@ type API =
       :<|> "api" :> "articles"
            :> QueryParam "limit" Limit :> QueryParam "offset" Offset
            :> QueryParam "author" Author :> QueryParam "tag" Tagged
-           :> QueryParam "favourited" FavouritedBy
+           :> QueryParam "favourited" FavoritedBy
            :> AuthProtect "JWT-optional"
            :> Get '[JSON] (Arts [Article])
         -- | Feed Article
@@ -110,6 +110,14 @@ type API =
            :> AuthProtect "JWT"
            :> Delete '[JSON] ()
 
+        -- | Favorite Article
+      :<|> "api" :> "articles" :> Capture "slug" Text :> "favorite"
+           :> AuthProtect "JWT"
+           :> Post '[JSON] ()
+        -- | Unfavorite Article
+      :<|> "api" :> "articles" :> Capture "slug" Text :> "favorite"
+           :> AuthProtect "JWT"
+           :> Delete '[JSON] ()
         -- | Get Tags
       :<|> "api" :> "tags"
            :> Get '[JSON] (TagList [Text])
@@ -136,6 +144,8 @@ server conn = (loginHandler conn)
          :<|> (createArticleHandler conn)
          :<|> (updateArticleHandler conn)
          :<|> (deleteArticleHandler conn)
+         :<|> (favoriteArticleHandler conn)
+         :<|> (unfavoriteArticleHandler conn)
          :<|> (getTagsHandler conn)
 
 ------------------------------------------------------------------------
@@ -271,7 +281,7 @@ createArticleHandler conn user (Art newArticle) = do
 
 updateArticleHandler :: Connection -> Text -> DBUser -> (Art UpdateArticle) -> Handler (Art (Maybe Article))
 updateArticleHandler conn slug user (Art uArticle) = do
-  article <- liftIO $ dbGetDBArticleBySlug conn user slug
+  article <- liftIO $ dbGetUsersDBArticleBySlug conn user slug
   case article of
     Nothing -> return $ Art $ Nothing
     Just x -> do
@@ -284,7 +294,7 @@ listArticlesHandler :: Connection
                     -> Maybe Offset
                     -> Maybe Author
                     -> Maybe Tagged
-                    -> Maybe FavouritedBy
+                    -> Maybe FavoritedBy
                     -> Maybe DBUser
                     -> Handler (Arts [Article])
 listArticlesHandler conn mbLimit mbOffset mbAuthor mbTag mbFavBy mbUser = do
@@ -302,7 +312,7 @@ feedHandler conn mbLimit mbOffset user = do
 
 deleteArticleHandler :: Connection -> Text -> DBUser -> Handler ()
 deleteArticleHandler conn slug user = do
-  article <- liftIO $ dbGetDBArticleBySlug conn user slug
+  article <- liftIO $ dbGetUsersDBArticleBySlug conn user slug
   case article of
     -- TODO error numer and message
     Nothing -> throwError err404
@@ -312,6 +322,23 @@ getTagsHandler :: Connection -> Handler (TagList [Text])
 getTagsHandler conn = do
   tags <- liftIO $ dbGetTags conn
   return $ TagList $ fmap tagText tags
+
+favoriteArticleHandler :: Connection -> Text -> DBUser -> Handler ()
+favoriteArticleHandler conn slug user = do
+  article <- liftIO $ dbGetDBArticleBySlug conn slug
+  case article of
+    -- TODO error number and message
+    Nothing -> throwError err404
+    Just x -> liftIO $ dbFavoriteArticle conn user x
+
+
+unfavoriteArticleHandler :: Connection -> Text -> DBUser -> Handler ()
+unfavoriteArticleHandler conn slug user = do
+  article <- liftIO $ dbGetDBArticleBySlug conn slug
+  case article of
+    -- TODO error number and message
+    Nothing -> throwError err404
+    Just x -> liftIO $ dbUnfavoriteArticle conn user x
 
 ------------------------------------------------------------------------
 -- | Utils

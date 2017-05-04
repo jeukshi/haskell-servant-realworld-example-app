@@ -278,7 +278,7 @@ dbAddArticle conn user article = do
      \ VALUES \
           \ (?, ?, ?, ?, ?) "
 
--- TODO Add favourited and following.
+-- TODO Add favorited and following.
 dbGetArticleById :: Connection -> DBUser -> Int64 -> IO (Maybe Article)
 dbGetArticleById conn user art_id = do
   results <- query conn stmt args :: IO [Article]
@@ -294,7 +294,7 @@ dbGetArticleById conn user art_id = do
           \ , art_updatedAt \
           \ , 0 as favourided \
           \ , ifnull((select count(1) \
-               \ from favourited \
+               \ from favorited \
               \ where fav_art_id = art_id \
               \ group by fav_art_id), 0) \
          \ AS favourites_count \
@@ -312,7 +312,7 @@ dbGetArticleById conn user art_id = do
          \ ON art_usr_id=author.usr_id \
       \ WHERE art_id = ? and art_id = ? "
 
--- TODO Add favourited and following.
+-- TODO Add favorited and following.
 -- TODO copy pasted
 dbGetArticleBySlug :: Connection -> Text -> IO (Maybe Article)
 dbGetArticleBySlug conn slug = do
@@ -329,7 +329,7 @@ dbGetArticleBySlug conn slug = do
           \ , art_updatedAt \
           \ , 0 as favourided \
           \ , ifnull((select count(1) \
-               \ from favourited \
+               \ from favorited \
               \ where fav_art_id = art_id \
               \ group by fav_art_id), 0) \
          \ AS favourites_count \
@@ -349,8 +349,8 @@ dbGetArticleBySlug conn slug = do
 
 
 -- TODO update slug with title
-dbGetDBArticleBySlug :: Connection -> DBUser -> Text -> IO (Maybe DBArticle)
-dbGetDBArticleBySlug conn user slug = do
+dbGetUsersDBArticleBySlug :: Connection -> DBUser -> Text -> IO (Maybe DBArticle)
+dbGetUsersDBArticleBySlug conn user slug = do
   results <- query conn stmt args :: IO [DBArticle]
   return $ listToMaybe results
   where
@@ -367,6 +367,25 @@ dbGetDBArticleBySlug conn user slug = do
        \ FROM articles \
       \ WHERE art_slug = ? \
         \ AND art_usr_id = ? "
+
+dbGetDBArticleBySlug :: Connection -> Text -> IO (Maybe DBArticle)
+dbGetDBArticleBySlug conn slug = do
+  results <- query conn stmt args :: IO [DBArticle]
+  return $ listToMaybe results
+  where
+    args = toRow (Only slug)
+    stmt =
+      "SELECT art_id \
+          \ , art_slug \
+          \ , art_title \
+          \ , art_description \
+          \ , art_body \
+          \ , art_createdAt \
+          \ , art_updatedAt \
+          \ , art_usr_id \
+       \ FROM articles \
+      \ WHERE art_slug = ? "
+
 
 dbUpdateArticle :: Connection -> DBUser -> DBArticle -> IO (Maybe Article)
 dbUpdateArticle conn user DBArticle {..} = do
@@ -405,7 +424,7 @@ dbGetFeed conn limit offset user = do
           \ , art_updatedAt \
           \ , 0 as favourided \
           \ , ifnull((select count(1) \
-               \ from favourited \
+               \ from favorited \
               \ where fav_art_id = art_id \
               \ group by fav_art_id), 0) \
          \ AS favourites_count \
@@ -433,7 +452,7 @@ dbGetArticles :: Connection
               -> Offset
               -> Maybe Author
               -> Maybe Tagged
-              -> Maybe FavouritedBy
+              -> Maybe FavoritedBy
               -> Maybe DBUser
               -> IO [Article]
 dbGetArticles conn limit offset _ _ _ _ = do
@@ -450,7 +469,7 @@ dbGetArticles conn limit offset _ _ _ _ = do
           \ , art_updatedAt \
           \ , 0 as favourided \
           \ , ifnull((select count(1) \
-               \ from favourited \
+               \ from favorited \
               \ where fav_art_id = art_id \
               \ group by fav_art_id), 0) \
          \ AS favourites_count \
@@ -472,12 +491,12 @@ dbGetArticles conn limit offset _ _ _ _ = do
 dbDeleteArticle :: Connection -> DBArticle -> IO ()
 dbDeleteArticle conn article = do
   let art_id = Only $ drtId article
-  _ <- execute conn deleteFavourited art_id
+  _ <- execute conn deleteFavorited art_id
   _ <- execute conn deleteTagged art_id
   _ <- execute conn deleteArticles art_id
   return ()
   where
-    deleteFavourited = "DELETE FROM favourited where fav_art_id = ? "
+    deleteFavorited = "DELETE FROM favorited where fav_art_id = ? "
     deleteTagged = "DELETE FROM tagged where tgd_art_id = ? "
     deleteArticles = "DELETE FROM articles where art_id = ? "
 
@@ -487,3 +506,47 @@ dbGetTags conn = do
   return results
   where
     stmt = "select tag_id, tag_text from tags"
+
+dbIsFavoritedByUser :: Connection -> DBUser -> DBArticle -> IO Bool
+dbIsFavoritedByUser conn user article = do
+  results <- query conn stmt args :: IO [Ignore]
+  return $ (not . null) results
+  where
+    args = [usrId user, drtId article]
+    stmt =
+      " select \"\" \
+        \ from favorited \
+       \ where fav_usr_id = ? \
+         \ AND fav_art_id = ? "
+
+dbFavoriteArticle :: Connection -> DBUser -> DBArticle -> IO ()
+dbFavoriteArticle conn user article = do
+  isFavorited <- dbIsFavoritedByUser conn user article
+  case isFavorited of
+    True  -> return ()
+    False -> execute conn stmt args
+  where
+    args = toRow
+          ( usrId user
+          , drtId article)
+    stmt =
+     "INSERT INTO favorited \
+          \ ( fav_usr_id \
+          \ , fav_art_id) \
+     \ VALUES \
+          \ (?, ?) "
+
+dbUnfavoriteArticle :: Connection -> DBUser -> DBArticle -> IO ()
+dbUnfavoriteArticle conn user article = do
+  _ <- execute conn stmt args
+  return ()
+  where
+    args =
+        toRow
+          ( usrId user
+          , drtId article)
+    stmt =
+     "DELETE FROM favorited \
+     \ WHERE fav_usr_id = ? \
+       \ AND fav_art_id = ?"
+
