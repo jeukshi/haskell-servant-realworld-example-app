@@ -16,21 +16,42 @@ import           Data.Aeson.Types                 (FromJSON, ToJSON,
 import           Data.Char                        (toLower)
 import           Data.Maybe                       (fromMaybe, isNothing)
 import           Data.Text                        (Text)
-import           Database.SQLite.Simple           (field)
-import           Database.SQLite.Simple.FromField (FromField)
+import qualified Data.Text                        as T
+import           Data.Time                        (UTCTime)
+import           Database.SQLite.Simple           (SQLData (..), field)
+import           Database.SQLite.Simple.FromField (FromField, ResultError (..),
+                                                   fromField, returnError)
 import           Database.SQLite.Simple.FromRow   (FromRow, fromRow)
+import           Database.SQLite.Simple.Internal  (Field (..))
+import           Database.SQLite.Simple.Ok        (Ok (..))
 import           Database.SQLite.Simple.ToField   (ToField)
 import           Database.SQLite.Simple.ToRow     (ToRow, toRow)
 import           GHC.Generics                     (Generic)
 import           GHC.Int                          (Int64)
 
 toJSONoptions = defaultOptions {
-             fieldLabelModifier = map toLower . drop 3 }
+              fieldLabelModifier = headToLower . drop 3 }
+  where
+    headToLower x = toLower (head x) : tail x
 
 ------------------------------------------------------------------------
 -- | Common
 
+-- | QueryParams
+type Limit = Int
+type Offset = Int
+type Tagged = Text
+type Author = Username
+type FavouritedBy = Username
+
 type Username = Text
+
+newtype Tags = Tags { unTags :: [Text]}
+  deriving (Eq, Show, FromJSON, ToJSON)
+
+instance FromField Tags where
+  fromField (Field (SQLText txt) _) = Ok $ Tags $ T.splitOn ";" txt
+  fromField f                       = returnError ConversionFailed f "need a text"
 
 newtype Password = Password { unPassword :: Text }
   deriving (Eq, Show, FromJSON, FromField, ToField)
@@ -57,6 +78,24 @@ instance FromJSON a => FromJSON (Profile a) where
     a <- o .: "profile"
     return (Profile a)
 
+data Art a = Art a
+  deriving (Eq, Show, Generic)
+
+instance ToJSON a => ToJSON (Art a) where
+  toJSON (Art a) = object ["article" .= a]
+
+instance FromJSON a => FromJSON (Art a) where
+  parseJSON = withObject "article" $ \o -> do
+    a <- o .: "article"
+    return (Art a)
+
+data Arts a = Arts a Int
+  deriving (Eq, Show, Generic)
+
+instance ToJSON a => ToJSON (Arts a) where
+  toJSON (Arts a i) = object ["articles" .= a, "articlesCount" .= i]
+
+
 ------------------------------------------------------------------------
 -- | Response body
 
@@ -71,6 +110,39 @@ data AuthUser = AuthUser
 
 instance ToJSON AuthUser where
   toJSON = genericToJSON toJSONoptions
+
+data UserProfile = UserProfile
+  { proUsername  :: Username
+  , proBio       :: Maybe Text
+  , proImage     :: Maybe Text
+  , proFollowing :: Bool
+  } deriving (Eq, Show, Generic)
+
+instance ToJSON UserProfile where
+  toJSON = genericToJSON toJSONoptions
+
+instance FromRow UserProfile where
+  fromRow = UserProfile <$> field <*> field <*> field <*> field
+
+data Article = Article
+  { artSlug           :: Text
+  , artTitle          :: Text
+  , artDescription    :: Text
+  , artBody           :: Text
+  , artCreatedAt      :: UTCTime
+  , artUpdatedAt      :: Maybe UTCTime
+  , artFavorited      :: Int
+  , artFavoritesCount :: Int
+  , artTagList        :: Maybe Tags
+  , artAuthor         :: UserProfile
+  } deriving (Eq, Show, Generic)
+
+instance ToJSON Article where
+  toJSON = genericToJSON toJSONoptions
+
+instance FromRow Article where
+  fromRow = Article <$> field <*> field <*> field <*> field <*> field <*> field <*>
+    field <*> field <*> field <*> (UserProfile <$> field <*> field <*> field <*> field)
 
 ------------------------------------------------------------------------
 -- | Request body
@@ -110,34 +182,54 @@ instance FromJSON NewUser where
 instance ToRow NewUser where
   toRow (NewUser e u p b i) = toRow (e, u, p, b, i)
 
-data UserProfile = UserProfile
-  { proUsername  :: Username
-  , proBio       :: Maybe Text
-  , proImage     :: Maybe Text
-  , proFollowing :: Bool
+data NewArticle = NewArticle
+  { nrtTitle       :: Text
+  , nrtDescription :: Text
+  , nrtBody        :: Text
+  , nrtTagList     :: Maybe Tags
   } deriving (Eq, Show, Generic)
 
-instance ToJSON UserProfile where
-  toJSON = genericToJSON toJSONoptions
+instance FromJSON NewArticle where
+  parseJSON = genericParseJSON toJSONoptions
 
-data Article = Article
-  -- TODO types
-  { artSlug           :: Text
-  , artTitle          :: Text
-  , artDescription    :: Text
-  , artBody           :: Text
-  , artCreatedAt      :: Text
-  , artUpdatedAt      :: Text
-  , artFavorited      :: Text
-  , artFavoritesCount :: Text
-  , artAuthor         :: UserProfile
+-- TODO again we can't update field to null.
+data UpdateArticle = UpdateArticle
+  { urtTitle       :: Maybe Text
+  , urtDescription :: Maybe Text
+  , urtBody        :: Maybe Text
   } deriving (Eq, Show, Generic)
 
-instance ToJSON Article where
-  toJSON = genericToJSON toJSONoptions
+instance FromJSON UpdateArticle where
+  parseJSON = genericParseJSON toJSONoptions
 
 ------------------------------------------------------------------------
 -- | Database
+
+data Tag = Tag
+  { tagId   :: Int64
+  , tagText :: Text
+  } deriving (Eq, Show)
+
+instance FromRow Tag where
+  fromRow = Tag <$> field <*> field
+
+data DBArticle = DBArticle
+  { drtId          :: Int64
+  , drtSlug        :: Text
+  , drtTitle       :: Text
+  , drtDescription :: Text
+  , drtBody        :: Text
+  , drtCreatedAt   :: UTCTime
+  , drtUpdatedAt   :: Maybe UTCTime
+  , drtAuthor      :: Int64
+  } deriving (Eq, Show, Generic)
+
+instance ToJSON DBArticle where
+  toJSON = genericToJSON toJSONoptions
+
+instance FromRow DBArticle where
+  fromRow = DBArticle <$> field <*> field <*> field <*> field
+    <*> field <*> field <*> field <*> field
 
 data DBUser = DBUser
   { usrId       :: Int64
@@ -151,14 +243,6 @@ data DBUser = DBUser
 instance FromRow DBUser where
   fromRow = DBUser <$> field <*> field <*> field <*> field <*> field <*> field
 
-data DBFollows = DBFollows
-  { fwsUsrId :: Int64
-  , fwsFollowedUsrId :: Int64
-  } deriving (Eq, Show)
-
-instance FromRow DBFollows where
-  fromRow = DBFollows <$> field <*> field
-
 -- FIXME This way we can't set bio and image to null.
 updateUser :: DBUser -> UpdateUser -> DBUser
 updateUser DBUser {..} UpdateUser {..} =
@@ -171,3 +255,16 @@ updateUser DBUser {..} UpdateUser {..} =
 
 userToProfile :: Bool -> DBUser -> UserProfile
 userToProfile follows DBUser {..} = UserProfile usrUsername usrBio usrImage follows
+
+updateArticle :: DBArticle -> UpdateArticle -> DBArticle
+updateArticle DBArticle {..} UpdateArticle {..} =
+      DBArticle drtId
+                -- TODO update slug if title changes
+                drtSlug
+                (fromMaybe drtTitle urtTitle)
+                (fromMaybe drtDescription urtDescription)
+                (fromMaybe drtBody urtBody)
+                drtCreatedAt
+                drtUpdatedAt
+                drtAuthor
+

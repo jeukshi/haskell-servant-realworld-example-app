@@ -11,8 +11,9 @@ import           Data.Aeson                       (Result (..), fromJSON,
                                                    toJSON)
 import qualified Data.ByteString                  as BS
 import qualified Data.Map                         as Map
+import           Data.Maybe                       (fromMaybe)
 import           Data.Proxy
-import           Data.Text
+import           Data.Text                        (Text)
 import qualified Data.Text                        as T
 import           Data.Text.Encoding               (decodeUtf8)
 import           Data.Time                        (UTCTime)
@@ -81,6 +82,34 @@ type API =
       :<|> "api" :> "profiles" :> Capture "username" Username :> "follow"
            :> AuthProtect "JWT"
            :> Delete '[JSON] (Profile (Maybe UserProfile))
+        -- | List Article
+      :<|> "api" :> "articles"
+           :> QueryParam "limit" Limit :> QueryParam "offset" Offset
+           :> QueryParam "author" Author :> QueryParam "tag" Tagged
+           :> QueryParam "favourited" FavouritedBy
+           :> AuthProtect "JWT-optional"
+           :> Get '[JSON] (Arts [Article])
+        -- | Feed Article
+      :<|> "api" :> "articles" :> "feed"
+           :> QueryParam "limit" Limit :> QueryParam "offset" Offset
+           :> AuthProtect "JWT"
+           :> Get '[JSON] (Arts [Article])
+        -- | Get Article
+      :<|> "api" :> "articles" :> Capture "slug" Text
+           :> Get '[JSON] (Art (Maybe Article))
+        -- | Create Article
+      :<|> "api" :> "articles"
+           :> AuthProtect "JWT" :> ReqBody '[JSON] (Art NewArticle)
+           :> Post '[JSON] (Art Article)
+        -- | Update Article
+      :<|> "api" :> "articles" :> Capture "slug" Text
+           :> AuthProtect "JWT" :> ReqBody '[JSON] (Art UpdateArticle)
+           :> Put '[JSON] (Art (Maybe Article))
+        -- | Delete Article
+      :<|> "api" :> "articles" :> Capture "slug" Text
+           :> AuthProtect "JWT"
+           :> Delete '[JSON] ()
+
 
 api :: Proxy API
 api = Proxy
@@ -97,6 +126,12 @@ server conn = (loginHandler conn)
          :<|> (getProfileHandler conn)
          :<|> (followHandler conn)
          :<|> (unfollowHandler conn)
+         :<|> (listArticlesHandler conn)
+         :<|> (feedHandler conn)
+         :<|> (getArticleHandler conn)
+         :<|> (createArticleHandler conn)
+         :<|> (updateArticleHandler conn)
+         :<|> (deleteArticleHandler conn)
 
 ------------------------------------------------------------------------
 -- | Auth
@@ -167,7 +202,7 @@ loginHandler :: Connection -> (User Login) -> Handler (User AuthUser)
 loginHandler conn (User login) = do
   mbUser <- liftIO $ dbGetUserByLogin conn login
   case mbUser of
-    Nothing -> throwError (err401 {errBody = "Incorrect login or password"})
+    Nothing  -> throwError (err401 {errBody = "Incorrect login or password"})
     Just usr -> return $ User $ userToAuthUser usr
 
   -- TODO We should return error instead of Maybe.
@@ -215,6 +250,58 @@ unfollowHandler conn name user = do
     Just unfollowed -> do
       liftIO $ dbUnfollow conn user unfollowed
       return $ Profile $ Just $ userToProfile False unfollowed
+
+getArticleHandler :: Connection -> Text -> Handler (Art (Maybe Article))
+getArticleHandler conn slug = do
+  article <- liftIO $ dbGetArticleBySlug conn slug
+  return $ Art $ article
+
+createArticleHandler :: Connection -> DBUser -> (Art NewArticle) -> Handler (Art Article)
+createArticleHandler conn user (Art newArticle) = do
+  article' <- liftIO $ dbAddArticle conn user newArticle
+  case article' of
+    -- TODO Change error.
+    Nothing -> throwError err409
+    Just x  -> return $ Art x
+
+updateArticleHandler :: Connection -> Text -> DBUser -> (Art UpdateArticle) -> Handler (Art (Maybe Article))
+updateArticleHandler conn slug user (Art uArticle) = do
+  article <- liftIO $ dbGetDBArticleBySlug conn user slug
+  case article of
+    Nothing -> return $ Art $ Nothing
+    Just x -> do
+      let updatedArticle = updateArticle x uArticle
+      updated <- liftIO $ dbUpdateArticle conn user updatedArticle
+      return $ Art updated
+
+listArticlesHandler :: Connection
+                    -> Maybe Limit
+                    -> Maybe Offset
+                    -> Maybe Author
+                    -> Maybe Tagged
+                    -> Maybe FavouritedBy
+                    -> Maybe DBUser
+                    -> Handler (Arts [Article])
+listArticlesHandler conn mbLimit mbOffset mbAuthor mbTag mbFavBy mbUser = do
+  let limit = fromMaybe 20 mbLimit
+      offset = fromMaybe 0 mbOffset
+  articles <- liftIO $ dbGetArticles conn limit offset mbAuthor mbTag mbFavBy mbUser
+  return $ Arts articles (length articles)
+
+feedHandler :: Connection -> Maybe Limit -> Maybe Offset -> DBUser -> Handler (Arts [Article])
+feedHandler conn mbLimit mbOffset user = do
+  let limit = fromMaybe 20 mbLimit
+      offset = fromMaybe 0 mbOffset
+  articles <- liftIO $ dbGetFeed conn limit offset user
+  return $ Arts articles (length articles)
+
+deleteArticleHandler :: Connection -> Text -> DBUser -> Handler ()
+deleteArticleHandler conn slug user = do
+  article <- liftIO $ dbGetDBArticleBySlug conn user slug
+  case article of
+    -- TODO error numer and message
+    Nothing -> throwError err404
+    Just x -> liftIO $ dbDeleteArticle conn x
 
 ------------------------------------------------------------------------
 -- | Utils
