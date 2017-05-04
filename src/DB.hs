@@ -133,3 +133,53 @@ newUserWithId NewUser {..} id_ =
       usrBio = nusBio
       usrImage = nusImage
   in DBUser {..}
+
+
+dbIsUserFollowing :: Connection -> DBUser -> DBUser -> IO Bool
+dbIsUserFollowing conn user followed = do
+  results <- query conn stmt args :: IO [DBFollows]
+  return $ (not . null) results
+  where
+    args = [usrId user, usrId followed]
+    stmt =
+      " select fws_usr_id \
+           \ , fws_follows_usr_id \
+        \ from follows \
+       \ where fws_usr_id = ? \
+         \ AND fws_follows_usr_id = ? "
+
+dbFollow :: Connection -> DBUser -> DBUser -> IO ()
+dbFollow conn user toFollow = do
+  -- | Do nothing if we already follow that user.
+  isFollowed <- dbIsUserFollowing conn user toFollow
+  case isFollowed of
+    True -> return ()
+    False -> execute conn stmt args
+  where
+    args = toRow
+          ( usrId user
+          , usrId toFollow)
+    stmt =
+     "INSERT INTO follows \
+          \ ( fws_usr_id \
+          \ , fws_follows_usr_id) \
+     \ VALUES \
+          \ (?, ?) "
+
+dbUnfollow :: Connection -> DBUser -> DBUser -> IO ()
+dbUnfollow conn user toUnfollow = do
+  -- | Do nothing if we don't follow that user.
+  isFollowed <- dbIsUserFollowing conn user toUnfollow
+  case isFollowed of
+    False -> return ()
+    True -> execute conn stmt args
+  where
+    args =
+        toRow
+          ( usrId user
+          , usrId toUnfollow)
+    stmt =
+     "DELETE FROM follows \
+     \ WHERE fws_usr_id = ? \
+       \ AND fws_follows_usr_id = ?"
+

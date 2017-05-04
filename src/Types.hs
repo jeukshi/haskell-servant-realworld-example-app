@@ -46,6 +46,17 @@ instance FromJSON a => FromJSON (User a) where
     a <- o .: "user"
     return (User a)
 
+data Profile a = Profile a
+  deriving (Eq, Show, Generic)
+
+instance ToJSON a => ToJSON (Profile a) where
+  toJSON (Profile a) = object ["profile" .= a]
+
+instance FromJSON a => FromJSON (Profile a) where
+  parseJSON = withObject "profile" $ \o -> do
+    a <- o .: "profile"
+    return (Profile a)
+
 ------------------------------------------------------------------------
 -- | Response body
 
@@ -99,14 +110,14 @@ instance FromJSON NewUser where
 instance ToRow NewUser where
   toRow (NewUser e u p b i) = toRow (e, u, p, b, i)
 
-data Profile = Profile
+data UserProfile = UserProfile
   { proUsername  :: Username
   , proBio       :: Maybe Text
-  , proImage     :: Text
+  , proImage     :: Maybe Text
   , proFollowing :: Bool
   } deriving (Eq, Show, Generic)
 
-instance ToJSON Profile where
+instance ToJSON UserProfile where
   toJSON = genericToJSON toJSONoptions
 
 data Article = Article
@@ -119,7 +130,7 @@ data Article = Article
   , artUpdatedAt      :: Text
   , artFavorited      :: Text
   , artFavoritesCount :: Text
-  , artAuthor         :: Profile
+  , artAuthor         :: UserProfile
   } deriving (Eq, Show, Generic)
 
 instance ToJSON Article where
@@ -140,6 +151,14 @@ data DBUser = DBUser
 instance FromRow DBUser where
   fromRow = DBUser <$> field <*> field <*> field <*> field <*> field <*> field
 
+data DBFollows = DBFollows
+  { fwsUsrId :: Int64
+  , fwsFollowedUsrId :: Int64
+  } deriving (Eq, Show)
+
+instance FromRow DBFollows where
+  fromRow = DBFollows <$> field <*> field
+
 -- FIXME This way we can't set bio and image to null.
 updateUser :: DBUser -> UpdateUser -> DBUser
 updateUser DBUser {..} UpdateUser {..} =
@@ -150,3 +169,5 @@ updateUser DBUser {..} UpdateUser {..} =
              (if isNothing uusBio then usrBio else uusBio)
              (if isNothing uusImage then usrImage else uusImage)
 
+userToProfile :: Bool -> DBUser -> UserProfile
+userToProfile follows DBUser {..} = UserProfile usrUsername usrBio usrImage follows

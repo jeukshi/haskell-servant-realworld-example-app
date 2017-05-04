@@ -43,8 +43,11 @@ main = do
 app :: Connection -> Application
 app conn = serveWithContext api serverAuthContext (server conn)
   where
-    serverAuthContext :: Context (AuthHandler Request DBUser ': '[])
-    serverAuthContext = (authHandler conn) :. EmptyContext
+    serverAuthContext
+      :: Context
+      (AuthHandler Request DBUser ': AuthHandler Request (Maybe DBUser) ': '[])
+    serverAuthContext =
+      (authHandler conn) :. (authOptionalHandler conn) :. EmptyContext
 
 ------------------------------------------------------------------------
 -- | API
@@ -66,6 +69,18 @@ type API =
       :<|> "api" :> "user"
            :> AuthProtect "JWT" :> ReqBody '[JSON] (User UpdateUser)
            :> Put '[JSON] (User AuthUser)
+         -- | Profile Get
+      :<|> "api" :> "profiles" :> Capture "username" Username
+           :> AuthProtect "JWT-optional"
+           :> Get '[JSON] (Profile (Maybe UserProfile))
+         -- | Follow
+      :<|> "api" :> "profiles" :> Capture "username" Username :> "follow"
+           :> AuthProtect "JWT"
+           :> Post '[JSON] (Profile (Maybe UserProfile))
+        -- | Unfollow
+      :<|> "api" :> "profiles" :> Capture "username" Username :> "follow"
+           :> AuthProtect "JWT"
+           :> Delete '[JSON] (Profile (Maybe UserProfile))
 
 api :: Proxy API
 api = Proxy
@@ -79,11 +94,30 @@ server conn = (loginHandler conn)
          :<|> (registerHandler conn)
          :<|> (getUserHandler conn)
          :<|> (updateUserHandler conn)
+         :<|> (getProfileHandler conn)
+         :<|> (followHandler conn)
+         :<|> (unfollowHandler conn)
 
 ------------------------------------------------------------------------
 -- | Auth
 
 type instance AuthServerData (AuthProtect "JWT") = DBUser
+type instance AuthServerData (AuthProtect "JWT-optional") = (Maybe DBUser)
+
+-- TODO This is copy pasted authHandler returning Nothing instead of error.
+-- Refactor common stuff.
+authOptionalHandler :: Connection -> AuthHandler Request (Maybe DBUser)
+authOptionalHandler conn =
+  let handler req =
+        case lookup "Authorization" (requestHeaders req) of
+          Nothing -> return Nothing
+          Just token ->
+            case decodeToken token of
+              Nothing -> return Nothing
+              Just username -> do
+                mbUser <- liftIO $ dbGetUserByName conn username
+                return mbUser
+  in mkAuthHandler handler
 
 authHandler :: Connection -> AuthHandler Request DBUser
   -- FIXME Too nested.
@@ -129,23 +163,12 @@ token username =
 ------------------------------------------------------------------------
 -- | Handlers
 
-getUserHandler :: Connection -> DBUser -> Handler (User AuthUser)
-getUserHandler conn usr = return $ User $ userToAuthUser usr
-
 loginHandler :: Connection -> (User Login) -> Handler (User AuthUser)
 loginHandler conn (User login) = do
   mbUser <- liftIO $ dbGetUserByLogin conn login
   case mbUser of
     Nothing -> throwError (err401 {errBody = "Incorrect login or password"})
     Just usr -> return $ User $ userToAuthUser usr
-
-updateUserHandler :: Connection -> DBUser -> (User UpdateUser) -> Handler (User AuthUser)
-updateUserHandler conn user (User update) = do
-  let updatedUser = updateUser user update
-  result <- liftIO $ dbUpdateUser conn updatedUser
-  case result of
-    Nothing -> throwError (err409 {errBody = "Username or email already taken"})
-    Just x -> return $ User $ userToAuthUser x
 
   -- TODO We should return error instead of Maybe.
 registerHandler :: Connection -> (User NewUser) -> Handler (User (Maybe AuthUser))
@@ -155,6 +178,43 @@ registerHandler conn (User newUser) = do
   addedUser <- liftIO $ dbRegister conn newUser
   liftIO $ print addedUser
   return $ User $ fmap userToAuthUser addedUser
+
+getUserHandler :: Connection -> DBUser -> Handler (User AuthUser)
+getUserHandler conn usr = return $ User $ userToAuthUser usr
+
+updateUserHandler :: Connection -> DBUser -> (User UpdateUser) -> Handler (User AuthUser)
+updateUserHandler conn user (User update) = do
+  let updatedUser = updateUser user update
+  result <- liftIO $ dbUpdateUser conn updatedUser
+  case result of
+    Nothing -> throwError (err409 {errBody = "Username or email already taken"})
+    Just x -> return $ User $ userToAuthUser x
+
+getProfileHandler :: Connection -> Username -> Maybe DBUser -> Handler (Profile (Maybe UserProfile))
+getProfileHandler conn name mbRequestee = do
+  -- TODO follows
+  liftIO $ print mbRequestee
+  user <- liftIO $ dbGetUserByName conn name
+  let profile = fmap (userToProfile False) user
+  return $ Profile $ profile
+
+followHandler :: Connection -> Username -> DBUser -> Handler (Profile (Maybe UserProfile))
+followHandler conn name user = do
+  toFollow <- liftIO $ dbGetUserByName conn name
+  case toFollow of
+    Nothing -> return $ Profile $ Nothing
+    Just followed -> do
+      liftIO $ dbFollow conn user followed
+      return $ Profile $ Just $ userToProfile True followed
+
+unfollowHandler :: Connection -> Username -> DBUser -> Handler (Profile (Maybe UserProfile))
+unfollowHandler conn name user = do
+  toUnfollow <- liftIO $ dbGetUserByName conn name
+  case toUnfollow of
+    Nothing -> return $ Profile $ Nothing
+    Just unfollowed -> do
+      liftIO $ dbUnfollow conn user unfollowed
+      return $ Profile $ Just $ userToProfile False unfollowed
 
 ------------------------------------------------------------------------
 -- | Utils
@@ -167,4 +227,3 @@ userToAuthUser DBUser {..} =
       aurBio = usrBio
       aurImage = usrImage
   in AuthUser {..}
-
