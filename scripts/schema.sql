@@ -64,3 +64,18 @@ CREATE TABLE favorited (
   , FOREIGN KEY (fav_art_id) REFERENCES articles (art_id)
   , UNIQUE (fav_usr_id, fav_art_id)
 );
+
+DROP TABLE IF EXISTS comments;
+
+-- TODO trigger for updatedAt
+CREATE TABLE comments (
+    cmt_id INTEGER PRIMARY KEY
+  , cmt_body TEXT
+  , cmt_createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  , cmt_updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  , cmt_art_id INTEGER
+  , cmt_usr_id INTEGER
+
+  , FOREIGN KEY (cmt_art_id) REFERENCES articles (art_id)
+  , FOREIGN KEY (cmt_usr_id) REFERENCES users (usr_id)
+);

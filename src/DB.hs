@@ -550,3 +550,81 @@ dbUnfavoriteArticle conn user article = do
      \ WHERE fav_usr_id = ? \
        \ AND fav_art_id = ?"
 
+  -- TODO following
+dbGetCommentById :: Connection -> Int64 -> IO (Maybe Comment)
+dbGetCommentById conn cmt_id = do
+  results <- query conn stmt args :: IO [Comment]
+  return $ listToMaybe results
+  where
+    args = Only cmt_id
+    stmt =
+      "SELECT cmt_id \
+          \ , cmt_body \
+          \ , cmt_createdAt \
+          \ , cmt_updatedAt \
+          \ , author.usr_username \
+          \ , author.usr_bio \
+          \ , author.usr_image \
+          \ , 0 as following \
+       \ FROM comments \
+       \ JOIN users author \
+         \ ON cmt_usr_id=author.usr_id \
+      \ WHERE cmt_id = ? "
+
+dbAddComment :: Connection -> NewComment -> DBUser -> DBArticle -> IO (Maybe Comment)
+dbAddComment conn newComment user article = do
+  execute conn stmt args
+  cmt_id <- lastInsertRowId conn
+  comment <- dbGetCommentById conn cmt_id
+  return comment
+  where
+    args = toRow
+          ( nmtBody newComment
+          , drtId article
+          , usrId user)
+    stmt =
+     "INSERT INTO comments \
+          \ ( cmt_body \
+          \ , cmt_art_id \
+          \ , cmt_usr_id) \
+     \ VALUES \
+          \ (?, ?, ?) "
+
+
+dbDeleteComment :: Connection -> DBArticle -> DBUser -> Int -> IO ()
+dbDeleteComment conn article user art_id = do
+  _ <- execute conn stmt args
+  return ()
+  where
+    args =
+        toRow
+          ( usrId user
+          , drtId article
+          , art_id)
+    stmt =
+     "DELETE FROM comments \
+     \ WHERE cmt_usr_id = ? \
+       \ AND cmt_art_id = ? \
+       \ AND cmt_id = ?"
+
+  -- TODO following
+dbGetComments :: Connection -> DBArticle -> Maybe DBUser -> IO [Comment]
+dbGetComments conn article _ = do
+  results <- query conn stmt args :: IO [Comment]
+  return results
+  where
+    args = Only $ drtId article
+    stmt =
+      "SELECT cmt_id \
+          \ , cmt_body \
+          \ , cmt_createdAt \
+          \ , cmt_updatedAt \
+          \ , author.usr_username \
+          \ , author.usr_bio \
+          \ , author.usr_image \
+          \ , 0 as following \
+       \ FROM comments \
+       \ JOIN users author \
+         \ ON cmt_usr_id=author.usr_id \
+      \ WHERE cmt_art_id = ? "
+

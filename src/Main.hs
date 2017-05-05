@@ -109,14 +109,23 @@ type API =
       :<|> "api" :> "articles" :> Capture "slug" Text
            :> AuthProtect "JWT"
            :> Delete '[JSON] ()
-
+        -- | Add Comments to an Article
+      :<|> "api" :> "articles" :> Capture "slug" Text :> "comments"
+           :> AuthProtect "JWT" :> ReqBody '[JSON] (Cmt NewComment)
+           :> Post '[JSON] (Cmt Comment)
+        -- | Get Comments from an Article
+      :<|> "api" :> "articles" :> Capture "slug" Text :> "comments"
+           :> AuthProtect "JWT-optional"
+           :> Get '[JSON] (Cmts [Comment])
+        -- | Delete Comment
+      :<|> "api" :> "articles" :> Capture "slug" Text :> "comments" :> Capture "id" Int
+           :> AuthProtect "JWT"
+           :> Delete '[JSON] ()
         -- | Favorite Article
-         -- TODO return article
       :<|> "api" :> "articles" :> Capture "slug" Text :> "favorite"
            :> AuthProtect "JWT"
            :> Post '[JSON] (Art Article)
         -- | Unfavorite Article
-         -- TODO return article
       :<|> "api" :> "articles" :> Capture "slug" Text :> "favorite"
            :> AuthProtect "JWT"
            :> Delete '[JSON] (Art Article)
@@ -146,6 +155,9 @@ server conn = (loginHandler conn)
          :<|> (createArticleHandler conn)
          :<|> (updateArticleHandler conn)
          :<|> (deleteArticleHandler conn)
+         :<|> (addCommentHandler conn)
+         :<|> (getCommentsHandler conn)
+         :<|> (deleteCommentHandler conn)
          :<|> (favoriteArticleHandler conn)
          :<|> (unfavoriteArticleHandler conn)
          :<|> (getTagsHandler conn)
@@ -319,6 +331,37 @@ deleteArticleHandler conn slug user = do
     -- TODO error numer and message
     Nothing -> throwError err404
     Just x -> liftIO $ dbDeleteArticle conn x
+
+addCommentHandler :: Connection -> Text -> DBUser -> Cmt NewComment -> Handler (Cmt Comment)
+addCommentHandler conn slug user (Cmt newComment) = do
+  article <- liftIO $ dbGetDBArticleBySlug conn slug
+  case article of
+    -- TODO error number and message
+    Nothing -> throwError err404
+    -- TODO fix this mess
+    Just article' -> do
+      comment <- liftIO $ dbAddComment conn newComment user article'
+      case comment of
+        Nothing -> throwError err500
+        Just comment' -> return $ Cmt comment'
+getCommentsHandler :: Connection -> Text -> (Maybe DBUser) -> Handler (Cmts [Comment])
+getCommentsHandler conn slug mbUser = do
+  article <- liftIO $ dbGetDBArticleBySlug conn slug
+  case article of
+    -- TODO error number and message
+    Nothing -> throwError err404
+    Just article' -> do
+      comments <- liftIO $ dbGetComments conn article' mbUser
+      return $ Cmts comments
+
+
+deleteCommentHandler :: Connection -> Text -> Int -> DBUser -> Handler ()
+deleteCommentHandler conn slug art_id user = do
+  article <- liftIO $ dbGetDBArticleBySlug conn slug
+  case article of
+    -- TODO error number and message
+    Nothing -> throwError err404
+    Just article' -> liftIO $ dbDeleteComment conn article' user art_id
 
 getTagsHandler :: Connection -> Handler (TagList [Text])
 getTagsHandler conn = do

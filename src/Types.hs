@@ -101,6 +101,23 @@ data TagList a = TagList a
 instance ToJSON a => ToJSON (TagList a) where
   toJSON (TagList a) = object ["tags" .= a]
 
+data Cmt a = Cmt a
+  deriving (Eq, Show, Generic)
+
+instance ToJSON a => ToJSON (Cmt a) where
+  toJSON (Cmt a) = object ["comment" .= a]
+
+instance FromJSON a => FromJSON (Cmt a) where
+  parseJSON = withObject "comment" $ \o -> do
+    a <- o .: "comment"
+    return (Cmt a)
+
+data Cmts a = Cmts a
+  deriving (Eq, Show, Generic)
+
+instance ToJSON a => ToJSON (Cmts a) where
+  toJSON (Cmts a) = object ["comments" .= a]
+
 ------------------------------------------------------------------------
 -- | Response body
 
@@ -148,6 +165,21 @@ instance ToJSON Article where
 instance FromRow Article where
   fromRow = Article <$> field <*> field <*> field <*> field <*> field <*> field <*>
     field <*> field <*> field <*> (UserProfile <$> field <*> field <*> field <*> field)
+
+data Comment = Comment
+  { cmtId           :: Int64
+  , cmtBody           :: Text
+  , cmtCreatedAt      :: UTCTime
+  , cmtUpdatedAt      :: Maybe UTCTime
+  , cmtAuthor         :: UserProfile
+  } deriving (Eq, Show, Generic)
+
+instance ToJSON Comment where
+  toJSON = genericToJSON toJSONoptions
+
+instance FromRow Comment where
+  fromRow = Comment <$> field <*> field <*> field <*> field <*>
+    (UserProfile <$> field <*> field <*> field <*> field)
 
 ------------------------------------------------------------------------
 -- | Request body
@@ -207,6 +239,11 @@ data UpdateArticle = UpdateArticle
 instance FromJSON UpdateArticle where
   parseJSON = genericParseJSON toJSONoptions
 
+data NewComment = NewComment { nmtBody :: Text }
+  deriving (Eq, Show, Generic)
+
+instance FromJSON NewComment where
+  parseJSON = genericParseJSON toJSONoptions
 ------------------------------------------------------------------------
 -- | Database
 
@@ -272,4 +309,3 @@ updateArticle DBArticle {..} UpdateArticle {..} =
                 drtCreatedAt
                 drtUpdatedAt
                 drtAuthor
-
