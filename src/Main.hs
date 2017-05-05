@@ -27,7 +27,7 @@ import           Servant.Server.Experimental.Auth
 import           Types
 import qualified Web.JWT                          as JWT
 
--- FIXME Secret in source.
+-- FIXfavoritedME Secret in source.
 secret :: JWT.Secret
 secret = JWT.secret "unsafePerformIO"
 
@@ -111,13 +111,15 @@ type API =
            :> Delete '[JSON] ()
 
         -- | Favorite Article
+         -- TODO return article
       :<|> "api" :> "articles" :> Capture "slug" Text :> "favorite"
            :> AuthProtect "JWT"
-           :> Post '[JSON] ()
+           :> Post '[JSON] (Art Article)
         -- | Unfavorite Article
+         -- TODO return article
       :<|> "api" :> "articles" :> Capture "slug" Text :> "favorite"
            :> AuthProtect "JWT"
-           :> Delete '[JSON] ()
+           :> Delete '[JSON] (Art Article)
         -- | Get Tags
       :<|> "api" :> "tags"
            :> Get '[JSON] (TagList [Text])
@@ -323,22 +325,33 @@ getTagsHandler conn = do
   tags <- liftIO $ dbGetTags conn
   return $ TagList $ fmap tagText tags
 
-favoriteArticleHandler :: Connection -> Text -> DBUser -> Handler ()
+favoriteArticleHandler :: Connection -> Text -> DBUser -> Handler (Art Article)
 favoriteArticleHandler conn slug user = do
   article <- liftIO $ dbGetDBArticleBySlug conn slug
   case article of
     -- TODO error number and message
     Nothing -> throwError err404
-    Just x -> liftIO $ dbFavoriteArticle conn user x
+    -- TODO fix this mess
+    Just x -> do
+      liftIO $ dbFavoriteArticle conn user x
+      a <- liftIO $ dbGetArticleById conn user (drtId x)
+      case a of
+        Nothing -> throwError err404
+        Just x' -> return $ Art $ x'
 
-
-unfavoriteArticleHandler :: Connection -> Text -> DBUser -> Handler ()
+unfavoriteArticleHandler :: Connection -> Text -> DBUser -> Handler (Art Article)
 unfavoriteArticleHandler conn slug user = do
   article <- liftIO $ dbGetDBArticleBySlug conn slug
   case article of
     -- TODO error number and message
     Nothing -> throwError err404
-    Just x -> liftIO $ dbUnfavoriteArticle conn user x
+    -- TODO fix this mess
+    Just x -> do
+      liftIO $ dbUnfavoriteArticle conn user x
+      a <- liftIO $ dbGetArticleById conn user (drtId x)
+      case a of
+        Nothing -> throwError err404
+        Just x' -> return $ Art $ x'
 
 ------------------------------------------------------------------------
 -- | Utils
