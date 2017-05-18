@@ -3,7 +3,8 @@
 
 module DB where
 
-import           Data.Maybe             (listToMaybe)
+import           Data.List              (intercalate)
+import           Data.Maybe             (catMaybes, isJust, listToMaybe)
 import           Data.Text              (Text)
 import qualified Data.Text              as T
 import           Database.SQLite.Simple
@@ -455,12 +456,21 @@ dbGetArticles :: Connection
               -> Maybe FavoritedBy
               -> Maybe DBUser
               -> IO [Article]
-dbGetArticles conn limit offset _ _ _ _ = do
+dbGetArticles conn limit offset mbAuthor mbTagged mbFavoritedBy mbUser = do
   results <- query conn stmt args :: IO [Article]
   return results
   where
-    args = toRow (limit, offset)
-    stmt =
+    args = toRow $ whereArgs ++ [T.pack . show $ limit, T.pack . show $ offset]
+    mbWhereArgs = [mbAuthor, mbTagged] -- , mbFavoritedBy, fmap usrUsername mbUser]
+    whereNames = ["author.usr_username = ?", "tag_text = ?"]
+    whereArgs = catMaybes mbWhereArgs
+    whereString = intercalate " AND "
+                . map snd
+                . filter (isJust . fst)
+                $ zip mbWhereArgs whereNames
+    -- TODO String -> Text
+    stmt = Query $ T.pack stmt'
+    stmt' =
       "SELECT art_slug \
           \ , art_title \
           \ , art_description \
@@ -485,6 +495,12 @@ dbGetArticles conn limit offset _ _ _ _ = do
        \ FROM articles \
        \ JOIN users author \
          \ ON art_usr_id=author.usr_id \
+       \ LEFT JOIN tagged \
+         \ ON art_id= tgd_art_id \
+       \ LEFT JOIN tags \
+         \ ON tgd_tag_id=tag_id "
+         ++ if null whereString then "" else " WHERE " ++ whereString ++
+      " GROUP BY art_id \
       \ ORDER BY art_createdAt DESC \
       \ LIMIT ? OFFSET ? "
 
