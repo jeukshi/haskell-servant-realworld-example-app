@@ -27,7 +27,7 @@ import           Servant.Server.Experimental.Auth
 import           Types
 import qualified Web.JWT                          as JWT
 
--- FIXfavoritedME Secret in source.
+-- FIXME Secret in source.
 secret :: JWT.Secret
 secret = JWT.secret "unsafePerformIO"
 
