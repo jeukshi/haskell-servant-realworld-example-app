@@ -459,7 +459,6 @@ dbGetArticles :: Connection
               -> IO [Article]
 dbGetArticles conn limit offset mbAuthor mbTagged mbFavoritedBy mbUser = do
   results <- query conn stmt args :: IO [Article]
-  print userId
   return results
   where
     userId = fromMaybe 0 $ fmap usrId mbUser
