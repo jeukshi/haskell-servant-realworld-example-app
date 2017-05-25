@@ -4,7 +4,8 @@
 module DB where
 
 import           Data.List              (intercalate)
-import           Data.Maybe             (catMaybes, isJust, listToMaybe)
+import           Data.Maybe             (catMaybes, fromMaybe, isJust,
+                                         listToMaybe)
 import           Data.Text              (Text)
 import qualified Data.Text              as T
 import           Database.SQLite.Simple
@@ -458,9 +459,12 @@ dbGetArticles :: Connection
               -> IO [Article]
 dbGetArticles conn limit offset mbAuthor mbTagged mbFavoritedBy mbUser = do
   results <- query conn stmt args :: IO [Article]
+  print userId
   return results
   where
-    args = toRow $ whereArgs ++ [T.pack . show $ limit, T.pack . show $ offset]
+    userId = fromMaybe 0 $ fmap usrId mbUser
+
+    args = toRow $ whereArgs ++ [T.pack . show $ userId, T.pack . show $ limit, T.pack . show $ offset]
     mbWhereArgs = [mbAuthor, mbTagged] -- , mbFavoritedBy, fmap usrUsername mbUser]
     whereNames = ["author.usr_username = ?", "tag_text = ?"]
     whereArgs = catMaybes mbWhereArgs
@@ -491,15 +495,17 @@ dbGetArticles conn limit offset mbAuthor mbTagged mbFavoritedBy mbUser = do
           \ , author.usr_username \
           \ , author.usr_bio \
           \ , author.usr_image \
-          \ , 0 as following \
+          \ , CASE WHEN fws_usr_id is not null THEN 1 ELSE 0 END as following \
        \ FROM articles \
        \ JOIN users author \
          \ ON art_usr_id=author.usr_id \
        \ LEFT JOIN tagged \
          \ ON art_id= tgd_art_id \
+       \ LEFT JOIN follows \
+         \ ON author.usr_id=fws_follows_usr_id AND fws_usr_id = ? \
        \ LEFT JOIN tags \
          \ ON tgd_tag_id=tag_id "
-         ++ if null whereString then "" else " WHERE " ++ whereString ++
+         ++ (if null whereString then "" else " WHERE " ++ whereString) ++
       " GROUP BY art_id \
       \ ORDER BY art_createdAt DESC \
       \ LIMIT ? OFFSET ? "
@@ -625,7 +631,7 @@ dbDeleteComment conn article user art_id = do
 
   -- TODO following
 dbGetComments :: Connection -> DBArticle -> Maybe DBUser -> IO [Comment]
-dbGetComments conn article _ = do
+dbGetComments conn article mbUser = do
   results <- query conn stmt args :: IO [Comment]
   return results
   where
