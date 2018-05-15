@@ -85,7 +85,7 @@ type API =
         -- | List Article
       :<|> "api" :> "articles"
            :> QueryParam "limit" Limit :> QueryParam "offset" Offset
-           :> QueryParam "author" Author :> QueryParam "tag" Tagged
+           :> QueryParam "author" Author :> QueryParam "tag" Types.Tagged
            :> QueryParam "favourited" FavoritedBy
            :> AuthProtect "JWT-optional"
            :> Get '[JSON] (Arts [Article])
@@ -307,7 +307,7 @@ listArticlesHandler :: Connection
                     -> Maybe Limit
                     -> Maybe Offset
                     -> Maybe Author
-                    -> Maybe Tagged
+                    -> Maybe Types.Tagged
                     -> Maybe FavoritedBy
                     -> Maybe DBUser
                     -> Handler (Arts [Article])
