@@ -20,7 +20,8 @@ import           Data.Time                        (UTCTime)
 import           Database.SQLite.Simple           (Connection, open)
 import           DB
 import           Network.Wai
-import           Network.Wai.Handler.Warp         (run)
+import           Network.Wai.Handler.Warp         (run, setPort, setLogger, defaultSettings, runSettings)
+import           Network.Wai.Logger               (withStdoutLogger)
 import           Servant
 import           Servant.API
 import           Servant.Server.Experimental.Auth
@@ -39,7 +40,9 @@ main :: IO ()
 main = do
   print "Let's go!"
   conn <- connection
-  run 8081 (app conn)
+  withStdoutLogger $ \aplogger -> do
+    let settings = setPort 8081 $ setLogger aplogger defaultSettings
+    runSettings settings (app conn)
 
 app :: Connection -> Application
 app conn = serveWithContext api serverAuthContext (server conn)
@@ -85,7 +88,7 @@ type API =
         -- | List Article
       :<|> "api" :> "articles"
            :> QueryParam "limit" Limit :> QueryParam "offset" Offset
-           :> QueryParam "author" Author :> QueryParam "tag" Tagged
+           :> QueryParam "author" Author :> QueryParam "tag" Types.Tagged
            :> QueryParam "favourited" FavoritedBy
            :> AuthProtect "JWT-optional"
            :> Get '[JSON] (Arts [Article])
@@ -307,7 +310,7 @@ listArticlesHandler :: Connection
                     -> Maybe Limit
                     -> Maybe Offset
                     -> Maybe Author
-                    -> Maybe Tagged
+                    -> Maybe Types.Tagged
                     -> Maybe FavoritedBy
                     -> Maybe DBUser
                     -> Handler (Arts [Article])
